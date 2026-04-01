@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  OWNER
+  ADMIN
+  GUEST
+  STAFF
+}
+
+enum GenderType {
+  MALE
+  FEMALE
+  COED
+}
+
+enum RoomType {
+  SINGLE
+  DOUBLE
+  TRIPLE
+  DORM
+}
+
+enum RoomStatus {
+  VACANT
+  OCCUPIED
+  MAINTENANCE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentType {
+  RENT
+  DEPOSIT
+  ADVANCE
+  PENALTY
+  REFUND
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NETBANKING
+  CASH
+  WALLET
+}
+
+enum PaymentStatus {
+  P_PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum ComplaintCategory {
+  PLUMBING
+  ELECTRICAL
+  CLEANING
+  PEST
+  NOISE
+  FOOD
+  OTHER
+}
+
+enum ComplaintPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ComplaintStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+}
+
+enum VisitorStatus {
+  EXPECTED
+  CHECKED_IN
+  CHECKED_OUT
+  DENIED
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id                 String   @id @default(uuid()) @db.Uuid
+  name               String
+  email              String   @unique
+  phone              String?  @unique
+  passwordHash       String?  @map("password_hash")
+  role               Role
+  avatarUrl          String?  @map("avatar_url")
+  languagePreference String?  @map("language_preference")
+  isVerified         Boolean  @default(false) @map("is_verified")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  ownedProperties    Property[]      @relation("PropertyOwner")
+  bookings           Booking[]       @relation("GuestBookings")
+  complaintsRaised   Complaint[]     @relation("ComplaintGuest")
+  complaintsAssigned Complaint[]     @relation("ComplaintAssignee")
+  mealOptIns         MealOptIn[]     @relation("GuestMealOptIn")
+  visitorRequests    Visitor[]       @relation("VisitorGuest")
+  visitorApprovals   Visitor[]       @relation("VisitorApprover")
+  notifications      Notification[]  @relation("UserNotifications")
+  adminProperties    PropertyAdmin[] @relation("AdminUser")
+
+  @@index([email])
+  @@index([phone])
+  @@map("users")
+}
+
+model Property {
+  id          String     @id @default(uuid()) @db.Uuid
+  ownerId     String     @map("owner_id") @db.Uuid
+  name        String
+  description String?
+  address     String
+  city        String
+  state       String
+  pincode     String
+  latitude    Float?
+  longitude   Float?
+  genderType  GenderType @map("gender_type")
+  amenities   Json?
+  rules       Json?
+  photos      Json?
+  isListed    Boolean    @default(true) @map("is_listed")
+  isActive    Boolean    @default(true) @map("is_active")
+  avgRating   Float?     @default(0) @map("avg_rating")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  owner      User            @relation("PropertyOwner", fields: [ownerId], references: [id])
+  rooms      Room[]
+  complaints Complaint[]
+  meals      Meal[]
+  visitors   Visitor[]
+  admins     PropertyAdmin[]
+
+  @@index([city])
+  @@index([ownerId])
+  @@map("properties")
+}
+
+model Room {
+  id           String     @id @default(uuid()) @db.Uuid
+  propertyId   String     @map("property_id") @db.Uuid
+  roomNumber   String     @map("room_number")
+  floor        Int
+  roomType     RoomType   @map("room_type")
+  sharingType  Int        @map("sharing_type")
+  monthlyRent  Float      @map("monthly_rent")
+  dailyRent    Float?     @map("daily_rent")
+  status       RoomStatus @default(VACANT)
+  totalBeds    Int        @map("total_beds")
+  occupiedBeds Int        @default(0) @map("occupied_beds")
+  amenities    Json?
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  property   Property    @relation(fields: [propertyId], references: [id])
+  bookings   Booking[]
+  complaints Complaint[]
+
+  @@index([propertyId])
+  @@map("rooms")
+}
+
+model Booking {
+  id              String        @id @default(uuid()) @db.Uuid
+  guestId         String        @map("guest_id") @db.Uuid
+  roomId          String        @map("room_id") @db.Uuid
+  bedNumber       Int?          @map("bed_number")
+  checkInDate     DateTime      @map("check_in_date")
+  checkOutDate    DateTime?     @map("check_out_date")
+  status          BookingStatus @default(PENDING)
+  bookingAmount   Float         @map("booking_amount")
+  securityDeposit Float         @map("security_deposit")
+  rentAmount      Float         @map("rent_amount")
+  paymentStatus   String        @default("PENDING") @map("payment_status")
+  agreementUrl    String?       @map("agreement_url")
+  noticePeriodEnd DateTime?     @map("notice_period_end")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  guest    User      @relation("GuestBookings", fields: [guestId], references: [id])
+  room     Room      @relation(fields: [roomId], references: [id])
+  payments Payment[]
+
+  @@index([guestId])
+  @@index([roomId])
+  @@map("bookings")
+}
+
+model Payment {
+  id           String        @id @default(uuid()) @db.Uuid
+  bookingId    String        @map("booking_id") @db.Uuid
+  amount       Float
+  currency     String        @default("INR")
+  type         PaymentType
+  method       PaymentMethod
+  status       PaymentStatus @default(P_PENDING)
+  gatewayTxnId String?       @map("gateway_txn_id")
+  invoiceUrl   String?       @map("invoice_url")
+  dueDate      DateTime      @map("due_date")
+  paidAt       DateTime?     @map("paid_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+  @@map("payments")
+}
+
+model Complaint {
+  id                 String            @id @default(uuid()) @db.Uuid
+  guestId            String            @map("guest_id") @db.Uuid
+  propertyId         String            @map("property_id") @db.Uuid
+  roomId             String?           @map("room_id") @db.Uuid
+  category           ComplaintCategory
+  title              String
+  description        String
+  photos             Json?
+  priority           ComplaintPriority @default(MEDIUM)
+  status             ComplaintStatus   @default(OPEN)
+  assignedTo         String?           @map("assigned_to") @db.Uuid
+  resolvedAt         DateTime?         @map("resolved_at")
+  satisfactionRating Int?              @map("satisfaction_rating")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  guest    User      @relation("ComplaintGuest", fields: [guestId], references: [id])
+  property Property  @relation(fields: [propertyId], references: [id])
+  room     Room?     @relation(fields: [roomId], references: [id])
+  assignee User?     @relation("ComplaintAssignee", fields: [assignedTo], references: [id])
+
+  @@index([propertyId])
+  @@map("complaints")
+}
+
+model Meal {
+  id               String    @id @default(uuid()) @db.Uuid
+  propertyId       String    @map("property_id") @db.Uuid
+  date             DateTime
+  mealType         MealType  @map("meal_type")
+  menuItems        Json      @map("menu_items")
+  expectedCount    Int       @default(0) @map("expected_count")
+  actualCount      Int       @default(0) @map("actual_count")
+  feedbackAvgRating Float?   @map("feedback_avg_rating")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  property Property    @relation(fields: [propertyId], references: [id])
+  optIns   MealOptIn[]
+
+  @@map("meals")
+}
+
+model MealOptIn {
+  id             String  @id @default(uuid()) @db.Uuid
+  mealId         String  @map("meal_id") @db.Uuid
+  guestId        String  @map("guest_id") @db.Uuid
+  optedIn        Boolean @default(true) @map("opted_in")
+  dietPreference String? @map("diet_preference")
+
+  // Relations
+  meal  Meal @relation(fields: [mealId], references: [id])
+  guest User @relation("GuestMealOptIn", fields: [guestId], references: [id])
+
+  @@map("meal_opt_ins")
+}
+
+model Visitor {
+  id             String        @id @default(uuid()) @db.Uuid
+  guestId        String        @map("guest_id") @db.Uuid
+  propertyId     String        @map("property_id") @db.Uuid
+  visitorName    String        @map("visitor_name")
+  visitorPhone   String        @map("visitor_phone")
+  visitorIdProof String?       @map("visitor_id_proof")
+  purpose        String
+  entryTime      DateTime?     @map("entry_time")
+  exitTime       DateTime?     @map("exit_time")
+  approvedBy     String?       @map("approved_by") @db.Uuid
+  status         VisitorStatus @default(EXPECTED)
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  guest    User     @relation("VisitorGuest", fields: [guestId], references: [id])
+  property Property @relation(fields: [propertyId], references: [id])
+  approver User?    @relation("VisitorApprover", fields: [approvedBy], references: [id])
+
+  @@map("visitors")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation("UserNotifications", fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+model PropertyAdmin {
+  id         String   @id @default(uuid()) @db.Uuid
+  propertyId String   @map("property_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  isActive   Boolean  @default(true) @map("is_active")
+
+  // Relations
+  property Property @relation(fields: [propertyId], references: [id])
+  user     User     @relation("AdminUser", fields: [userId], references: [id])
+
+  @@map("property_admins")
+}
+
+model OtpVerification {
+  id        String   @id @default(uuid()) @db.Uuid
+  phone     String?
+  email     String?
+  otp       String
+  expiresAt DateTime @map("expires_at")
+  isUsed    Boolean  @default(false) @map("is_used")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("otp_verifications")
+}
