@@ -42,7 +42,7 @@ export const DEMO_ACCOUNTS = [
 export function findDemoAccount(identifier: { phone?: string; email?: string }) {
   if (identifier.email) {
     return DEMO_ACCOUNTS.find(
-      (a) => a.email === identifier.email.toLowerCase()
+      (a) => a.email === identifier.email!.toLowerCase()
     );
   }
   if (identifier.phone) {

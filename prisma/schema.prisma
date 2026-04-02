@@ -103,6 +103,41 @@ enum VisitorStatus {
   DENIED
 }
 
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AnnouncementType {
+  GENERAL
+  MAINTENANCE
+  EMERGENCY
+  EVENT
+}
+
+enum ExpenseCategory {
+  MAINTENANCE
+  GROCERIES
+  UTILITIES
+  STAFF_SALARY
+  SUPPLIES
+  OTHER
+}
+
+enum NoticePeriodStatus {
+  REQUESTED
+  APPROVED
+  COMPLETED
+  WITHDRAWN
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -129,6 +164,13 @@ model User {
   visitorApprovals   Visitor[]       @relation("VisitorApprover")
   notifications      Notification[]  @relation("UserNotifications")
   adminProperties    PropertyAdmin[] @relation("AdminUser")
+  reviews            Review[]        @relation("ReviewGuest")
+  announcements      Announcement[]  @relation("AnnouncementAuthor")
+  expenses           Expense[]       @relation("ExpenseRecorder")
+  tasksAssigned      StaffTask[]     @relation("TaskAssignee")
+  tasksCreated       StaffTask[]     @relation("TaskAssigner")
+  noticePeriods      NoticePeriod[]  @relation("NoticePeriodGuest")
+  auditLogs          AuditLog[]      @relation("AuditLogUser")
 
   @@index([email])
   @@index([phone])
@@ -161,8 +203,12 @@ model Property {
   rooms      Room[]
   complaints Complaint[]
   meals      Meal[]
-  visitors   Visitor[]
-  admins     PropertyAdmin[]
+  visitors      Visitor[]
+  admins        PropertyAdmin[]
+  reviews       Review[]
+  announcements Announcement[]
+  expenses      Expense[]
+  tasks         StaffTask[]
 
   @@index([city])
   @@index([ownerId])
@@ -214,7 +260,8 @@ model Booking {
   // Relations
   guest    User      @relation("GuestBookings", fields: [guestId], references: [id])
   room     Room      @relation(fields: [roomId], references: [id])
-  payments Payment[]
+  payments      Payment[]
+  noticePeriods NoticePeriod[]
 
   @@index([guestId])
   @@index([roomId])
@@ -363,4 +410,114 @@ model OtpVerification {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("otp_verifications")
+}
+
+model Review {
+  id         String   @id @default(uuid()) @db.Uuid
+  guestId    String   @map("guest_id") @db.Uuid
+  propertyId String   @map("property_id") @db.Uuid
+  rating     Int      // 1-5
+  comment    String?
+  isPublic   Boolean  @default(true) @map("is_public")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  guest    User     @relation("ReviewGuest", fields: [guestId], references: [id])
+  property Property @relation(fields: [propertyId], references: [id])
+
+  @@map("reviews")
+}
+
+model Announcement {
+  id         String           @id @default(uuid()) @db.Uuid
+  propertyId String           @map("property_id") @db.Uuid
+  authorId   String           @map("author_id") @db.Uuid
+  title      String
+  content    String
+  type       AnnouncementType @default(GENERAL)
+  isPinned   Boolean          @default(false) @map("is_pinned")
+  isActive   Boolean          @default(true) @map("is_active")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  property Property @relation(fields: [propertyId], references: [id])
+  author   User     @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+
+  @@index([propertyId])
+  @@map("announcements")
+}
+
+model Expense {
+  id          String          @id @default(uuid()) @db.Uuid
+  propertyId  String          @map("property_id") @db.Uuid
+  category    ExpenseCategory
+  amount      Float
+  description String?
+  receiptUrl  String?         @map("receipt_url")
+  date        DateTime
+  recordedBy  String          @map("recorded_by") @db.Uuid
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  property Property @relation(fields: [propertyId], references: [id])
+  recorder User     @relation("ExpenseRecorder", fields: [recordedBy], references: [id])
+
+  @@index([propertyId])
+  @@map("expenses")
+}
+
+model StaffTask {
+  id          String       @id @default(uuid()) @db.Uuid
+  propertyId  String       @map("property_id") @db.Uuid
+  assignedTo  String       @map("assigned_to") @db.Uuid
+  assignedBy  String       @map("assigned_by") @db.Uuid
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(PENDING)
+  dueDate     DateTime?    @map("due_date")
+  completedAt DateTime?    @map("completed_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  property Property @relation(fields: [propertyId], references: [id])
+  assignee User     @relation("TaskAssignee", fields: [assignedTo], references: [id])
+  assigner User     @relation("TaskAssigner", fields: [assignedBy], references: [id])
+
+  @@index([propertyId])
+  @@map("staff_tasks")
+}
+
+model NoticePeriod {
+  id              String             @id @default(uuid()) @db.Uuid
+  bookingId       String             @map("booking_id") @db.Uuid
+  guestId         String             @map("guest_id") @db.Uuid
+  requestDate     DateTime           @default(now()) @map("request_date")
+  noticeDays      Int                @default(30) @map("notice_days")
+  expectedEndDate DateTime           @map("expected_end_date")
+  status          NoticePeriodStatus @default(REQUESTED)
+  reason          String?
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  guest   User    @relation("NoticePeriodGuest", fields: [guestId], references: [id])
+
+  @@map("notice_periods")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id") @db.Uuid
+  details    Json?
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation("AuditLogUser", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entityType])
+  @@map("audit_logs")
 }

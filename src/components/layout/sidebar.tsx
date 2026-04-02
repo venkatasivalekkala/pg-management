@@ -23,6 +23,15 @@ import {
   Building,
   X,
   User,
+  Megaphone,
+  Search,
+  Star,
+  LogOut,
+  ClipboardList,
+  Wallet,
+  Shield,
+  Bell,
+  PieChart,
 } from "lucide-react";
 
 // ─── Navigation config ──────────────────────────────────────────────────────
@@ -40,41 +49,85 @@ interface NavGroup {
 }
 
 const navGroups: NavGroup[] = [
+  // ── Owner Portal ─────────────────────────────────────────────
+  {
+    title: "OWNER PORTAL",
+    items: [
+      {
+        label: "Portfolio",
+        href: "/owner/dashboard",
+        icon: PieChart,
+        roles: [UserRole.OWNER],
+      },
+      {
+        label: "My Properties",
+        href: "/owner/properties",
+        icon: Building2,
+        roles: [UserRole.OWNER],
+      },
+      {
+        label: "Analytics",
+        href: "/owner/analytics",
+        icon: BarChart3,
+        roles: [UserRole.OWNER],
+      },
+      {
+        label: "Team",
+        href: "/owner/team",
+        icon: Users,
+        roles: [UserRole.OWNER],
+      },
+      {
+        label: "Payouts",
+        href: "/owner/payouts",
+        icon: Wallet,
+        roles: [UserRole.OWNER],
+      },
+      {
+        label: "Settings",
+        href: "/owner/settings",
+        icon: Settings,
+        roles: [UserRole.OWNER],
+      },
+    ],
+  },
+  // ── Admin Main ───────────────────────────────────────────────
   {
     title: "MAIN",
     items: [
       {
         label: "Dashboard",
-        href: "/admin/dashboard",
+        href: "/admin",
         icon: LayoutDashboard,
-        roles: [UserRole.OWNER, UserRole.ADMIN],
+        roles: [UserRole.ADMIN],
       },
       {
         label: "Properties",
         href: "/admin/properties",
         icon: Building2,
-        roles: [UserRole.OWNER, UserRole.ADMIN],
+        roles: [UserRole.ADMIN],
       },
       {
         label: "Rooms",
         href: "/admin/rooms",
         icon: DoorOpen,
-        roles: [UserRole.OWNER, UserRole.ADMIN],
-      },
-      {
-        label: "My Room",
-        href: "/guest/my-room",
-        icon: DoorOpen,
-        roles: [UserRole.GUEST],
+        roles: [UserRole.ADMIN],
       },
       {
         label: "Bookings",
         href: "/admin/bookings",
         icon: CalendarCheck,
-        roles: [UserRole.OWNER, UserRole.ADMIN],
+        roles: [UserRole.ADMIN],
+      },
+      {
+        label: "Guests",
+        href: "/admin/guests",
+        icon: Users,
+        roles: [UserRole.ADMIN],
       },
     ],
   },
+  // ── Admin Operations ─────────────────────────────────────────
   {
     title: "OPERATIONS",
     items: [
@@ -82,54 +135,155 @@ const navGroups: NavGroup[] = [
         label: "Payments",
         href: "/admin/payments",
         icon: CreditCard,
-        roles: [UserRole.OWNER, UserRole.ADMIN, UserRole.GUEST],
+        roles: [UserRole.ADMIN],
       },
       {
         label: "Complaints",
         href: "/admin/complaints",
         icon: AlertCircle,
-        roles: [UserRole.OWNER, UserRole.ADMIN, UserRole.GUEST],
+        roles: [UserRole.ADMIN],
       },
       {
         label: "Meals",
         href: "/admin/meals",
         icon: UtensilsCrossed,
-        roles: [UserRole.OWNER, UserRole.ADMIN, UserRole.GUEST],
+        roles: [UserRole.ADMIN],
       },
       {
         label: "Visitors",
         href: "/admin/visitors",
         icon: Users,
-        roles: [UserRole.OWNER, UserRole.ADMIN, UserRole.GUEST],
+        roles: [UserRole.ADMIN],
+      },
+      {
+        label: "Announcements",
+        href: "/admin/announcements",
+        icon: Megaphone,
+        roles: [UserRole.ADMIN],
       },
     ],
   },
+  // ── Admin Management ─────────────────────────────────────────
   {
     title: "MANAGEMENT",
     items: [
       {
-        label: "Staff",
+        label: "Staff & Tasks",
         href: "/admin/staff",
         icon: UserCog,
-        roles: [UserRole.OWNER, UserRole.ADMIN],
+        roles: [UserRole.ADMIN],
       },
       {
         label: "Reports",
         href: "/admin/reports",
         icon: BarChart3,
-        roles: [UserRole.OWNER, UserRole.ADMIN],
+        roles: [UserRole.ADMIN],
       },
       {
         label: "Settings",
         href: "/admin/settings",
         icon: Settings,
-        roles: [UserRole.OWNER, UserRole.ADMIN],
+        roles: [UserRole.ADMIN],
       },
+    ],
+  },
+  // ── Guest Portal ─────────────────────────────────────────────
+  {
+    title: "MY STAY",
+    items: [
+      {
+        label: "My Room",
+        href: "/guest/my-room",
+        icon: DoorOpen,
+        roles: [UserRole.GUEST],
+      },
+      {
+        label: "Payments",
+        href: "/guest/payments",
+        icon: CreditCard,
+        roles: [UserRole.GUEST],
+      },
+      {
+        label: "Complaints",
+        href: "/guest/complaints",
+        icon: AlertCircle,
+        roles: [UserRole.GUEST],
+      },
+      {
+        label: "Meals",
+        href: "/guest/meals",
+        icon: UtensilsCrossed,
+        roles: [UserRole.GUEST],
+      },
+      {
+        label: "Visitors",
+        href: "/guest/visitors",
+        icon: Users,
+        roles: [UserRole.GUEST],
+      },
+    ],
+  },
+  {
+    title: "DISCOVER",
+    items: [
+      {
+        label: "Explore PGs",
+        href: "/guest/explore",
+        icon: Search,
+        roles: [UserRole.GUEST],
+      },
+      {
+        label: "Announcements",
+        href: "/guest/announcements",
+        icon: Megaphone,
+        roles: [UserRole.GUEST],
+      },
+      {
+        label: "Reviews",
+        href: "/guest/reviews",
+        icon: Star,
+        roles: [UserRole.GUEST],
+      },
+      {
+        label: "Notice Period",
+        href: "/guest/notices",
+        icon: LogOut,
+        roles: [UserRole.GUEST],
+      },
+    ],
+  },
+  {
+    title: "ACCOUNT",
+    items: [
       {
         label: "Profile",
         href: "/guest/profile",
         icon: User,
         roles: [UserRole.GUEST],
+      },
+    ],
+  },
+  // ── Staff Portal ─────────────────────────────────────────────
+  {
+    title: "MY TASKS",
+    items: [
+      {
+        label: "Dashboard",
+        href: "/staff/dashboard",
+        icon: LayoutDashboard,
+        roles: [UserRole.STAFF],
+      },
+      {
+        label: "My Tasks",
+        href: "/staff/tasks",
+        icon: ClipboardList,
+        roles: [UserRole.STAFF],
+      },
+      {
+        label: "Visitors",
+        href: "/staff/visitors",
+        icon: Users,
+        roles: [UserRole.STAFF],
       },
     ],
   },

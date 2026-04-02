@@ -1,5 +1,6 @@
 import { hash, compare } from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
+import { NextRequest } from "next/server";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -7,6 +8,13 @@ export interface TokenPayload {
   userId: string;
   role: string;
   email: string;
+}
+
+export interface AuthUser {
+  id: string;
+  role: string;
+  email: string;
+  name: string;
 }
 
 // ─── Secret ──────────────────────────────────────────────────────────────────
@@ -67,4 +75,41 @@ export async function verifyToken(token: string): Promise<TokenPayload> {
     role: payload.role as string,
     email: payload.email as string,
   };
+}
+
+// ─── Request Auth ───────────────────────────────────────────────────────────
+
+/**
+ * Extract and verify the Bearer token from a request, then look up the user.
+ * Returns { id, role, email, name } or null if unauthenticated.
+ */
+export async function verifyAuth(
+  request: NextRequest
+): Promise<AuthUser | null> {
+  try {
+    // Check Bearer token first, then fall back to cookie
+    let token: string | null = null;
+    const authHeader = request.headers.get("authorization");
+    if (authHeader?.startsWith("Bearer ")) {
+      token = authHeader.slice(7);
+    } else {
+      token = request.cookies.get("token")?.value || null;
+    }
+    if (!token) return null;
+    const decoded = await verifyToken(token);
+
+    // Lazy-import prisma to avoid circular dependency issues
+    const { default: prisma } = await import("@/lib/prisma");
+
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, role: true, email: true, name: true },
+    });
+
+    if (!user || !user.name) return null;
+
+    return { id: user.id, role: user.role, email: user.email, name: user.name };
+  } catch {
+    return null;
+  }
 }
