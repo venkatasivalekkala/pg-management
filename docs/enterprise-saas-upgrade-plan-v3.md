@@ -1,4 +1,4 @@
-# Enterprise SaaS Upgrade Plan — PG Management (Refined v4)
+# Enterprise SaaS Upgrade Plan — PG Management (Refined v5 — Post Council Review)
 
 ## Context
 The app has pages and APIs but is NOT a production SaaS product. Deep audit from every role's lifecycle reveals gaps far beyond just "add auth." The design document specifies 10 modules with 100+ use cases. This plan covers every gap found by walking through each user role's complete lifecycle.
@@ -968,6 +968,42 @@ Config (per property): roomLockOnNotice: boolean (default false)
 # PART C: REFINED IMPLEMENTATION PLAN
 
 ## Phase 0: Foundation (must come first)
+
+### 0.0 Council-Mandated Additions (C-1 through C-10)
+- **Testing infrastructure**: Vitest + React Testing Library + Playwright. Add from day 1.
+- **TanStack Query (React Query)**: Replace `useApi` hook as primary data fetching layer. Provides caching, deduplication, background refetch, optimistic updates.
+- **CI/CD pipeline**: `.github/workflows/ci.yml` — lint → type-check → test → build → Lighthouse CI → deploy.
+- **ESLint + Prettier + Husky**: Flat ESLint config, Prettier, lint-staged, Husky pre-commit hooks.
+- **Database indexes**: `@@index` directives for hot query paths: `Payment(bookingId, status, dueDate)`, `Booking(guestId, status)`, `Complaint(propertyId, status, priority)`, `Room(propertyId, status)`, `AuditLog(userId, createdAt)`, `Notification(userId, isRead)`.
+- **Security headers**: CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy in `next.config.ts`.
+- **Remove hardcoded JWT secret fallback** — crash if `NEXTAUTH_SECRET` env var is missing.
+- **Cookie hardening**: `HttpOnly: true`, `Secure: true`, `SameSite: Strict`.
+- **Product analytics**: PostHog or Plausible from day 1. Track page views, feature usage, funnel completion.
+- **Background jobs**: Use Inngest (or Trigger.dev) instead of Vercel Cron for all scheduled tasks.
+
+### 0.0.1 MVP Scope Definition
+If shipping in 6 weeks, the MVP is:
+- **Admin**: Manage properties, rooms, bookings, payments, complaints
+- **Guest**: Book room, pay rent, raise complaint, view room info
+- **Owner**: See dashboard with revenue, occupancy, property list
+- **Auth**: OTP login, role-based access, data isolation
+- **Deferred from MVP**: Map search, meals, visitors, staff tasks, reviews, announcements, notices, reports, audit logs, bulk comms, pricing engine, PDFs, file uploads
+
+### 0.0.2 Subscription Tiers
+| Feature | FREE | PRO (₹999/mo) | ENTERPRISE (₹4,999/mo) |
+|---------|------|---------------|------------------------|
+| Properties | 1 | 5 | Unlimited |
+| Rooms | 10 | 100 | Unlimited |
+| Dashboard | Basic | Full analytics | Full + custom |
+| Payments | Manual recording | Razorpay integration | Razorpay + auto-invoice |
+| Reports | None | PDF/CSV export | Full BI + Excel |
+| Staff management | No | Yes | Yes |
+| Bulk communication | No | No | Yes |
+| API access | No | No | Yes (API keys) |
+| Webhooks | No | No | Yes |
+| White-label | No | No | Yes |
+| SSO | No | No | Yes |
+| Support | Community | Email | Priority + phone |
 
 ### 0.1 Input Validation Layer
 **New file**: `src/lib/validations.ts`
