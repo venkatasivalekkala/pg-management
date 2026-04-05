@@ -1,7 +1,328 @@
-# Enterprise SaaS Upgrade Plan — PG Management (Refined v3)
+# Enterprise SaaS Upgrade Plan — PG Management (Refined v4)
 
 ## Context
 The app has pages and APIs but is NOT a production SaaS product. Deep audit from every role's lifecycle reveals gaps far beyond just "add auth." The design document specifies 10 modules with 100+ use cases. This plan covers every gap found by walking through each user role's complete lifecycle.
+
+---
+
+# TECH STACK
+
+### Current Stack
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Framework | Next.js (App Router) | 16.2.1 |
+| UI | React | 19.2.4 |
+| Language | TypeScript | 6.0.2 |
+| Styling | Tailwind CSS | 4.2.2 |
+| Icons | Lucide React | 1.7.0 |
+| Forms | React Hook Form + Zod | 7.72 + 4.3.6 |
+| Charts | Recharts | 3.8.1 |
+| ORM | Prisma | 5.22.0 |
+| Database | PostgreSQL | 17 |
+| Auth | jose (JWT) + NextAuth 5 beta | Edge-compatible |
+| Utils | date-fns, clsx, tailwind-merge | Latest |
+
+### Stack Additions Required
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| Component Primitives | Radix UI | Accessible primitives (Dialog, Popover, Tooltip, DropdownMenu, Sheet) |
+| Toast | Sonner | Toast notifications |
+| Maps | Leaflet + react-leaflet | Property map search (free, no API key) |
+| PDF | @react-pdf/renderer | Invoice, receipt, certificate generation |
+| File Upload | @aws-sdk/client-s3 OR Cloudinary | KYC docs, property photos, complaint photos |
+| Payment Gateway | Razorpay | UPI, cards, net banking, auto-debit |
+| Email | Resend or AWS SES | Transactional emails |
+| SMS/WhatsApp | MSG91 | OTP, payment reminders, visitor alerts |
+| Logging | pino + pino-pretty | Structured JSON logging |
+| Validation | Zod (already installed) | API + form validation |
+| PWA | next-pwa or @serwist/next | Offline support, install prompt, push notifications |
+| i18n | next-intl | Hindi, Telugu, Kannada, Tamil |
+| Monitoring | Sentry | Error tracking + performance |
+| Rate Limit | In-memory (MVP) → Redis | API rate limiting |
+| Image Optimization | Next.js Image + sharp | Auto-optimize uploaded photos |
+| Date Picker | react-day-picker | Booking dates, availability calendar |
+
+### Design Principles
+- **Mobile-first**: All CSS starts at smallest breakpoint, expands with `sm:`, `md:`, `lg:`, `xl:`
+- **Web-only SaaS**: Single Next.js app serves all devices (no separate mobile app needed)
+- **PWA-enabled**: Installable on phone home screen, offline access to cached data
+- **Dark mode**: CSS variable-based theming with system preference detection + manual toggle
+- **Accessible**: WCAG 2.1 AA compliant, proper ARIA, focus management, keyboard navigation
+
+---
+
+# PART L: MOBILE-FIRST UI DESIGN SYSTEM
+
+## L.1 Current UI Assessment
+
+**What's good (keep):**
+- Mobile sidebar drawer with backdrop overlay
+- Responsive grid layouts (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`)
+- Sticky header with mobile menu button
+- 18 custom UI components with TypeScript + forwardRef
+- CSS variable-based theming (indigo primary, slate neutrals)
+- Good ARIA attributes on form elements
+
+**What's broken/missing (fix):**
+
+| Issue | Impact | Fix |
+|-------|--------|-----|
+| No bottom navigation on mobile | Guests/staff must open drawer for every navigation | Add `<BottomNav>` for GUEST and STAFF roles |
+| Search hidden on mobile (`hidden md:block`) | 60%+ mobile users can't search | Add mobile search overlay/toggle |
+| No dark mode | Users in low-light environments, battery drain on OLED | Add dark mode CSS variables + toggle |
+| No responsive typography | Headings too large on mobile (fixed `text-2xl`) | Use `text-lg sm:text-xl lg:text-2xl` pattern |
+| Modals center-aligned only | Desktop pattern, awkward on mobile | Add bottom sheet pattern for mobile modals |
+| No PWA manifest | Can't install as app on phone | Add `manifest.json` + service worker |
+| No touch target enforcement | Some icon buttons < 44px | Enforce `min-h-11 min-w-11` on all interactive elements |
+| No pull-to-refresh | Expected mobile gesture | Add pull-to-refresh on list pages |
+| No swipe gestures | Swipe to go back, swipe actions on cards | Add swipe-to-delete on complaint cards, etc. |
+| No skeleton loading | Content shift on load | Add skeleton components for every card/list |
+| No empty state illustrations | Blank pages when no data | Add illustrated empty states with CTAs |
+| Tables not mobile-friendly | Horizontal scroll required | Convert to card layout on mobile |
+| No floating action button | Primary action buried in header | Add FAB on key mobile screens |
+
+## L.2 Mobile Navigation Pattern
+
+### Guest Role — Bottom Navigation (5 tabs)
+```
+┌─────────────────────────────────────────┐
+│  🏠 Home  │  💰 Pay  │  🔧 Help  │  🍽️ Meals  │  👤 More  │
+└─────────────────────────────────────────┘
+```
+- **Home**: My Room dashboard (current stay, announcements)
+- **Pay**: Payment screen (pay rent, history, receipts)
+- **Help**: Raise complaint (quick action) + complaint list
+- **Meals**: This week's menu + opt-in/out
+- **More**: Visitors, Reviews, Notices, Explore, Profile, Settings
+
+### Staff Role — Bottom Navigation (4 tabs)
+```
+┌─────────────────────────────────────────┐
+│  📋 Tasks  │  🚪 Visitors  │  🔔 Alerts  │  👤 Profile  │
+└─────────────────────────────────────────┘
+```
+
+### Admin & Owner Roles — Sidebar Only (desktop-heavy)
+- Admins/owners primarily use desktop/tablet — keep sidebar drawer pattern
+- Add quick-action FAB on mobile: "+ Add" button (new booking, new payment, new task)
+
+### Implementation
+- New component: `src/components/layout/bottom-nav.tsx`
+- Conditionally rendered based on `role` and screen size: `lg:hidden`
+- Active tab highlighted with indigo
+- Badge count on Help tab (open complaints) and Alerts tab
+- Adjust `<main>` padding-bottom when bottom nav is visible: `pb-16 lg:pb-0`
+
+## L.3 Mobile-First Component Upgrades
+
+### Bottom Sheet Modal
+```
+Mobile (<lg):  Slides up from bottom, rounded top corners, swipe-down to close
+Desktop (lg+): Centered modal (current behavior)
+```
+- Use Radix `Sheet` primitive or build with Tailwind transforms
+- New component: `src/components/ui/sheet.tsx`
+- Replace `<Modal>` usage on mobile-critical flows: payment, complaint, visitor registration
+
+### Responsive Tables → Card Lists
+```
+Desktop: <Table> with columns
+Mobile:  <Card> list with key info + expand
+
+Example — Payments Table:
+┌────────────────────────────────────┐
+│ Jan 2026 Rent           ₹12,000   │
+│ Due: 1 Jan  •  Paid: 3 Jan  ✅    │
+│ [Download Receipt]                 │
+├────────────────────────────────────┤
+│ Dec 2025 Rent           ₹12,000   │
+│ Due: 1 Dec  •  OVERDUE  ⚠️        │
+│ [Pay Now]                          │
+└────────────────────────────────────┘
+```
+- New component: `src/components/ui/responsive-table.tsx`
+- Renders `<Table>` on `lg:` screens, `<Card>` list on mobile
+- Used in: payments, bookings, complaints, visitors, tasks, audit logs
+
+### Floating Action Button (FAB)
+```
+Mobile: Fixed bottom-right, above bottom nav
+┌─────────────────┐
+│                  │
+│           [+ ●]  │  ← FAB
+│                  │
+│ 🏠 │ 💰 │ 🔧 │ 🍽️ │ 👤 │ ← Bottom Nav
+└─────────────────┘
+```
+- New component: `src/components/ui/fab.tsx`
+- Context-aware: on payments page → "Record Payment", on complaints → "New Complaint"
+- `lg:hidden` (desktop has header buttons)
+
+### Skeleton Loading
+- New component: `src/components/ui/skeleton.tsx`
+- Variants: `card`, `table-row`, `stat-card`, `text-line`, `avatar`
+- Every page shows skeleton while `loading` is true (from `useApi`)
+
+### Pull-to-Refresh
+- New component: `src/components/ui/pull-to-refresh.tsx`
+- Wrapper that triggers data refetch on pull gesture
+- Used on list pages: complaints, payments, announcements, tasks
+
+## L.4 Dark Mode Implementation
+
+### CSS Variables (in `globals.css`)
+```css
+:root {
+  --background: 0 0% 100%;      /* white */
+  --foreground: 222 47% 11%;    /* slate-900 */
+  --card: 0 0% 100%;
+  --border: 214 32% 91%;        /* slate-200 */
+  --primary: 239 84% 67%;       /* indigo-500 */
+  /* ... */
+}
+
+.dark {
+  --background: 222 47% 11%;    /* slate-900 */
+  --foreground: 210 40% 98%;    /* slate-50 */
+  --card: 217 33% 17%;          /* slate-800 */
+  --border: 217 33% 25%;        /* slate-700 */
+  --primary: 239 84% 67%;       /* stays same */
+  /* ... */
+}
+```
+
+### Toggle
+- New component: `src/components/ui/theme-toggle.tsx` (Sun/Moon icon)
+- Placed in header (desktop) and bottom-nav More menu (mobile)
+- Persisted in `localStorage`, respects `prefers-color-scheme` as default
+
+## L.5 Best-in-Class UI Patterns (from Airbnb, Stanza Living, Buildium)
+
+### Property Discovery (Airbnb-inspired)
+| Pattern | Implementation |
+|---------|---------------|
+| **Category chips** at top | Horizontal scroll: "Budget", "Premium", "AC", "Food Included", "Near Metro" |
+| **Visual property cards** | Large photo (16:9), price badge overlay, rating stars, amenities icons row |
+| **Trust badges** | "Verified", "Top Rated", "Quick Response" badges on listing cards |
+| **Map + list split view** | Desktop: 60% list / 40% map. Mobile: toggle between list and map view |
+| **Search this area** | Button appears when user pans map, re-fetches properties in viewport |
+| **Availability calendar** | Visual date picker showing available rooms per date range |
+| **Photo gallery** | Lightbox carousel with swipe, pinch-to-zoom on mobile |
+
+### Payment Experience (Best-in-class)
+| Pattern | Implementation |
+|---------|---------------|
+| **One-tap pay** | Saved UPI/card, single button to pay current rent |
+| **Payment due banner** | Prominent red/amber banner at top of guest dashboard when rent is due |
+| **Receipt download** | PDF receipt with QR code for verification |
+| **Payment timeline** | Visual timeline: Generated → Sent → Reminder → Paid (with dates) |
+| **Partial payment indicator** | Progress bar: "₹8,000 of ₹12,000 paid" with "Pay Remaining" button |
+
+### Complaint Flow (Wizard-style)
+```
+Step 1: Category selection (visual icons grid — Plumbing, Electrical, Cleaning, WiFi, Pest, Other)
+Step 2: Description + photo upload (camera access on mobile)
+Step 3: Priority selection (optional, admin can override)
+Step 4: Confirmation with expected resolution time
+
+Mobile: Full-screen wizard, one step per screen
+Desktop: Multi-step form in modal
+```
+
+### Room Management Grid (Admin — color-coded)
+```
+Visual floor grid:
+  🟢 101  🔴 102  🔴 103  🟡 104
+  🟢 201  🔴 202  🟠 203  ⬜ 204
+
+Green = Vacant    Red = Occupied (paid)
+Yellow = Notice   Orange = Occupied (overdue)
+Gray = Maintenance
+
+Click room → Side panel with occupant info, payment status, complaints
+```
+
+### Admin Dashboard (Buildium-inspired)
+| Section | Content |
+|---------|---------|
+| **Top KPI strip** | 4-6 stat cards: Occupancy %, Revenue MTD, Open Complaints, Dues Pending |
+| **Action required** | Cards needing attention: "3 bookings pending approval", "5 rents overdue" |
+| **Today's activity** | Check-ins, check-outs, visitors expected, meal count |
+| **Quick actions** | FAB or toolbar: Record Payment, Approve Booking, Assign Task |
+| **Revenue chart** | Last 6 months trend line |
+
+### Guest Dashboard (Stanza Living-inspired)
+| Section | Content |
+|---------|---------|
+| **Room card** | Room number, floor, sharing type, check-in date, key amenities |
+| **Payment banner** | "Rent due in 3 days — ₹12,000" with [Pay Now] button |
+| **This week's menu** | Compact meal calendar for the week |
+| **Announcements** | Last 2-3 announcements with "See all" link |
+| **Quick actions** | 4 icon buttons: Pay Rent, Raise Issue, Register Visitor, Opt-out Meal |
+
+## L.6 PWA Configuration
+
+### manifest.json
+```json
+{
+  "name": "PG Manager",
+  "short_name": "PGM",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
+```
+
+### Service Worker Strategy
+- **Cache first**: Static assets (JS, CSS, fonts, icons)
+- **Network first**: API calls (always try fresh data, fall back to cache)
+- **Stale-while-revalidate**: Property listings, meal menus (show cached, fetch fresh in background)
+- **Offline page**: Show cached dashboard data + "You're offline" banner + queue actions for sync
+
+### Push Notifications (via service worker)
+- Rent due reminders
+- Complaint status updates
+- Visitor arrival alerts
+- New announcements
+- Booking approval notifications
+
+## L.7 Responsive Typography Scale
+
+```css
+/* Base: mobile-first */
+h1: text-xl sm:text-2xl lg:text-3xl     /* 20px → 24px → 30px */
+h2: text-lg sm:text-xl lg:text-2xl      /* 18px → 20px → 24px */
+h3: text-base sm:text-lg                  /* 16px → 18px */
+body: text-sm sm:text-base                /* 14px → 16px */
+caption: text-xs sm:text-sm               /* 12px → 14px */
+```
+
+## L.8 New UI Components Required (Summary)
+
+| Component | Purpose | Priority |
+|-----------|---------|----------|
+| `bottom-nav.tsx` | Mobile bottom navigation for Guest/Staff | HIGH |
+| `sheet.tsx` | Bottom sheet modal for mobile | HIGH |
+| `responsive-table.tsx` | Table on desktop, card list on mobile | HIGH |
+| `fab.tsx` | Floating action button for mobile | HIGH |
+| `skeleton.tsx` | Skeleton loading placeholders | HIGH |
+| `theme-toggle.tsx` | Dark mode toggle | MEDIUM |
+| `photo-gallery.tsx` | Lightbox carousel with swipe/zoom | HIGH |
+| `file-upload.tsx` | Drag-drop upload with camera on mobile | HIGH |
+| `availability-calendar.tsx` | Visual date range picker for rooms | HIGH |
+| `category-chips.tsx` | Horizontal scroll filter chips | MEDIUM |
+| `trust-badge.tsx` | Verified, Top Rated badges | LOW |
+| `payment-timeline.tsx` | Visual payment status progression | MEDIUM |
+| `room-grid.tsx` | Color-coded room floor plan | HIGH |
+| `wizard-form.tsx` | Multi-step full-screen form for mobile | MEDIUM |
+| `pull-to-refresh.tsx` | Pull-down refresh gesture | LOW |
+| `progress-bar.tsx` | Partial payment, occupancy indicators | MEDIUM |
+| `notification-banner.tsx` | Dismissible alert banner (rent due, etc.) | HIGH |
 
 ---
 
@@ -1040,12 +1361,16 @@ Same as before, plus:
 # PART D: IMPLEMENTATION PRIORITY & ORDER
 
 ```
-Sprint 1 (Week 1-2): Foundation + Security [CRITICAL PATH]
+Sprint 1 (Week 1-2): Foundation + Security + UI System [CRITICAL PATH]
   Phase 0: Validation, File Upload, PDF, Toast, Notification service,
            Structured logging (0.6), Health check (0.7), Perf middleware (0.8)
   Phase 1: Authorization utility + Secure all 34 routes,
            Data isolation enforcement (1.5), Optimistic locking (1.4),
            Rate limiting (1.3)
+  UI Foundation: Dark mode CSS vars + toggle, responsive typography scale,
+           skeleton.tsx, bottom-nav.tsx, sheet.tsx (bottom sheet),
+           responsive-table.tsx, fab.tsx, notification-banner.tsx,
+           PWA manifest + service worker setup, Radix UI primitives install
 
 Sprint 2 (Week 3-4): Multi-Tenancy + Core Business Rules
   Phase 2: Organization, Subscription, Feature Gates,
@@ -1060,6 +1385,12 @@ Sprint 3 (Week 5-6): Public Discovery + Guest Lifecycle
            Payments (Razorpay + prorated rent 4.6),
            No-show detection (4.7), Cancellation flow (4.8),
            Check-out, Meal enhancements
+  UI Discovery: photo-gallery.tsx, availability-calendar.tsx,
+           category-chips.tsx, trust-badge.tsx, map split-view,
+           search overlay for mobile
+  UI Guest: payment-timeline.tsx, progress-bar.tsx (partial payments),
+           wizard-form.tsx (complaint flow), guest bottom nav wiring,
+           one-tap pay UI, rent-due banner
 
 Sprint 4 (Week 7-8): Admin Operations + Owner Features
   Phase 5: Auto invoicing, Reminder automation, SLA engine,
@@ -1069,6 +1400,9 @@ Sprint 4 (Week 7-8): Admin Operations + Owner Features
   Phase 6: Financial reports, Pricing UI, Occupancy analytics,
            Meal billing (6.5), Wastage report (6.6),
            Staff salary (6.7), Activity feed (6.8), Audit log
+  UI Admin: room-grid.tsx (color-coded floor plan), admin dashboard
+           redesign (KPI strip + action-required cards + today's activity),
+           staff bottom nav wiring, responsive table→card conversions
 
 Sprint 5 (Week 9-10): Platform + Enterprise + Polish
   Phase 7: Legal pages, Super admin, Compliance, i18n,
@@ -1194,6 +1528,8 @@ These files are the highest-impact touch points where most changes will occur:
 |----------|-------|
 | Feature gaps identified | G1-G99 (99 total) |
 | Technical gaps identified | T1-T20 (20 total) |
+| UI/UX gaps identified | 13 (PART L.1) |
+| New UI components required | 17 (PART L.8) |
 | Implementation phases | 0-9 (10 phases) |
 | New Prisma models | 12 |
 | Modified Prisma enums | 4 |
@@ -1201,5 +1537,21 @@ These files are the highest-impact touch points where most changes will occur:
 | Business rules codified | H.1-H.6 (6 rules) |
 | State machine diagrams | 3 (Booking, Payment, Complaint) |
 | API access matrix entries | 17 route groups × 6 roles |
+| Stack additions required | 17 packages |
 | Sprint timeline | 6 sprints (12 weeks) + post-launch |
 | Verification checklist items | 35+ |
+
+### Coverage Audit: Design Document (100 use cases) vs Plan
+| Module | Use Cases | Covered | Gap IDs |
+|--------|-----------|---------|---------|
+| Property Management | 10 | 10/10 | G9, G10, G39 + existing |
+| Booking & Reservation | 10 | 10/10 | G4-G6, G70-G73 |
+| Rent & Payment | 10 | 10/10 | G14-G16, G31, G97 |
+| Complaint & Maintenance | 10 | 10/10 | G29, G55-G56, G74-G76 |
+| Meal Management | 10 | 10/10 | G19-G22, G60, G77-G79 |
+| Visitor Management | 10 | 10/10 | G23-G26, G80-G82 |
+| Check-in / Check-out | 10 | 10/10 | G11-G13, G30, G83-G84 |
+| Communication | 10 | 10/10 | G27-G28, G85-G87 |
+| Reports & Analytics | 10 | 10/10 | G33, G37-G38, G41, G88-G90 |
+| Discovery & Listing | 10 | 10/10 | G1-G3, G7-G8 |
+| **TOTAL** | **100** | **100/100** | All mapped to gaps or existing |
