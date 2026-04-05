@@ -237,6 +237,7 @@ model Room {
   complaints Complaint[]
 
   @@index([propertyId])
+  @@index([propertyId, status])
   @@map("rooms")
 }
 
@@ -264,7 +265,9 @@ model Booking {
   noticePeriods NoticePeriod[]
 
   @@index([guestId])
+  @@index([guestId, status])
   @@index([roomId])
+  @@index([status])
   @@map("bookings")
 }
 
@@ -286,6 +289,8 @@ model Payment {
   booking Booking @relation(fields: [bookingId], references: [id])
 
   @@index([bookingId])
+  @@index([bookingId, status])
+  @@index([status, dueDate])
   @@map("payments")
 }
 
@@ -313,6 +318,7 @@ model Complaint {
   assignee User?     @relation("ComplaintAssignee", fields: [assignedTo], references: [id])
 
   @@index([propertyId])
+  @@index([propertyId, status, priority])
   @@map("complaints")
 }
 
@@ -346,6 +352,7 @@ model MealOptIn {
   meal  Meal @relation(fields: [mealId], references: [id])
   guest User @relation("GuestMealOptIn", fields: [guestId], references: [id])
 
+  @@index([mealId, guestId])
   @@map("meal_opt_ins")
 }
 
@@ -368,6 +375,7 @@ model Visitor {
   property Property @relation(fields: [propertyId], references: [id])
   approver User?    @relation("VisitorApprover", fields: [approvedBy], references: [id])
 
+  @@index([propertyId])
   @@map("visitors")
 }
 
@@ -383,6 +391,7 @@ model Notification {
   // Relations
   user User @relation("UserNotifications", fields: [userId], references: [id])
 
+  @@index([userId, isRead])
   @@map("notifications")
 }
 
@@ -484,6 +493,7 @@ model StaffTask {
   assigner User     @relation("TaskAssigner", fields: [assignedBy], references: [id])
 
   @@index([propertyId])
+  @@index([assignedTo, status])
   @@map("staff_tasks")
 }
 
@@ -502,6 +512,8 @@ model NoticePeriod {
   booking Booking @relation(fields: [bookingId], references: [id])
   guest   User    @relation("NoticePeriodGuest", fields: [guestId], references: [id])
 
+  @@index([guestId])
+  @@index([bookingId])
   @@map("notice_periods")
 }
 
@@ -519,5 +531,6 @@ model AuditLog {
 
   @@index([userId])
   @@index([entityType])
+  @@index([createdAt])
   @@map("audit_logs")
 }

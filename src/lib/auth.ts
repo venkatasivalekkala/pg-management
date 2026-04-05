@@ -19,9 +19,15 @@ export interface AuthUser {
 
 // ─── Secret ──────────────────────────────────────────────────────────────────
 
-const SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || "dev-secret-change-in-production"
-);
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error("NEXTAUTH_SECRET environment variable is required. Set it in .env.local");
+  }
+  return new TextEncoder().encode(secret);
+}
+
+const SECRET = getJwtSecret();
 
 // ─── OTP ─────────────────────────────────────────────────────────────────────
 
@@ -44,10 +50,7 @@ export async function hashPassword(password: string): Promise<string> {
 /**
  * Compare a plaintext password against a bcrypt hash.
  */
-export async function verifyPassword(
-  password: string,
-  hashedPassword: string
-): Promise<boolean> {
+export async function verifyPassword(password: string, hashedPassword: string): Promise<boolean> {
   return compare(password, hashedPassword);
 }
 
@@ -83,9 +86,7 @@ export async function verifyToken(token: string): Promise<TokenPayload> {
  * Extract and verify the Bearer token from a request, then look up the user.
  * Returns { id, role, email, name } or null if unauthenticated.
  */
-export async function verifyAuth(
-  request: NextRequest
-): Promise<AuthUser | null> {
+export async function verifyAuth(request: NextRequest): Promise<AuthUser | null> {
   try {
     // Check Bearer token first, then fall back to cookie
     let token: string | null = null;

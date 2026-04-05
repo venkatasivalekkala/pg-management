@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { generateToken } from "@/lib/auth";
 import type { Role } from "@prisma/client";
+import { rateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 const VALID_ROLES: Role[] = ["OWNER", "ADMIN", "GUEST", "STAFF"];
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 5 requests per minute per IP
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const limited = rateLimit(getRateLimitKey(ip, "register"), 5, 60_000);
+    if (limited) return limited;
+
     const body = await req.json();
     const { name, email, phone, role } = body;
 
@@ -19,10 +25,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!VALID_ROLES.includes(role as Role)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid role" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Invalid role" }, { status: 400 });
     }
 
     // Clean phone if provided
@@ -95,7 +98,7 @@ export async function POST(req: NextRequest) {
     response.cookies.set("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "strict",
       path: "/",
       maxAge: 7 * 24 * 60 * 60, // 7 days
     });
@@ -103,9 +106,6 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (error) {
     console.error("Register error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to register user" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "Failed to register user" }, { status: 500 });
   }
 }

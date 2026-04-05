@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateOTP } from "@/lib/auth";
 import { isDemoIdentifier, DEMO_OTP } from "@/lib/demo-accounts";
+import { rateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 function isEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -20,6 +21,11 @@ function isValidPhone(phone: string): boolean {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 5 requests per minute per IP
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const limited = rateLimit(getRateLimitKey(ip, "send-otp"), 5, 60_000);
+    if (limited) return limited;
+
     const body = await req.json();
     const { phone, email } = body;
 
@@ -45,7 +51,10 @@ export async function POST(req: NextRequest) {
       const cleanPhone = cleanPhoneNumber(phone);
       if (!isValidPhone(cleanPhone)) {
         return NextResponse.json(
-          { success: false, error: "Invalid phone number. Include country code for international numbers." },
+          {
+            success: false,
+            error: "Invalid phone number. Include country code for international numbers.",
+          },
           { status: 400 }
         );
       }
@@ -56,9 +65,7 @@ export async function POST(req: NextRequest) {
     if (isDemoIdentifier(identifier)) {
       return NextResponse.json({
         success: true,
-        message: identifier.email
-          ? "OTP sent to your email"
-          : "OTP sent to your phone",
+        message: identifier.email ? "OTP sent to your email" : "OTP sent to your phone",
         otp: DEMO_OTP, // Always show for demo
         demo: true,
       });
@@ -93,16 +100,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Database not connected. Use demo accounts to test: owner@demo.com, admin@demo.com, or guest@demo.com (OTP: 123456)",
+          error:
+            "Database not connected. Use demo accounts to test: owner@demo.com, admin@demo.com, or guest@demo.com (OTP: 123456)",
         },
         { status: 503 }
       );
     }
   } catch (error) {
     console.error("Send OTP error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to send OTP" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "Failed to send OTP" }, { status: 500 });
   }
 }

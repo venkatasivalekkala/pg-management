@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateToken } from "@/lib/auth";
 import { findDemoAccount, DEMO_OTP } from "@/lib/demo-accounts";
+import { rateLimit, getRateLimitKey } from "@/lib/rate-limit";
 
 function cleanPhoneNumber(phone: string): string {
   const cleaned = phone.replace(/[^\d+]/g, "");
@@ -11,6 +12,11 @@ function cleanPhoneNumber(phone: string): string {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 5 requests per minute per IP
+    const ip = req.headers.get("x-forwarded-for") || "unknown";
+    const limited = rateLimit(getRateLimitKey(ip, "verify-otp"), 5, 60_000);
+    if (limited) return limited;
+
     const body = await req.json();
     const { phone, email, otp } = body;
 
@@ -62,7 +68,7 @@ export async function POST(req: NextRequest) {
       response.cookies.set("token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        sameSite: "strict",
         path: "/",
         maxAge: 7 * 24 * 60 * 60,
       });
@@ -133,7 +139,7 @@ export async function POST(req: NextRequest) {
       response.cookies.set("token", token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+        sameSite: "strict",
         path: "/",
         maxAge: 7 * 24 * 60 * 60,
       });
@@ -144,16 +150,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Database not connected. Use demo accounts: owner@demo.com, admin@demo.com, guest@demo.com (OTP: 123456)",
+          error:
+            "Database not connected. Use demo accounts: owner@demo.com, admin@demo.com, guest@demo.com (OTP: 123456)",
         },
         { status: 503 }
       );
     }
   } catch (error) {
     console.error("Verify OTP error:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to verify OTP" },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: "Failed to verify OTP" }, { status: 500 });
   }
 }

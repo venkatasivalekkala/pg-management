@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import {
+  requireAuth,
+  requireRole,
+  isUser,
+  hasPropertyAccess,
+  notFound,
+  forbidden,
+  badRequest,
+} from "@/lib/authorization";
+import { updateRoomSchema, validateBody } from "@/lib/validations";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(
-  _request: NextRequest,
-  context: RouteContext
-) {
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
+    // Require authentication for all roles
+    const authResult = requireAuth(request);
+    if (!isUser(authResult)) return authResult;
+    const user = authResult;
+
     const { id } = await context.params;
 
     const room = await prisma.room.findUnique({
@@ -26,62 +38,57 @@ export async function GET(
     });
 
     if (!room) {
-      return NextResponse.json(
-        { error: "Room not found" },
-        { status: 404 }
-      );
+      return notFound("Room");
+    }
+
+    // Verify the user has access to the property this room belongs to
+    const accessible = await hasPropertyAccess(user, room.propertyId);
+    if (!accessible) {
+      return forbidden("You do not have access to this room");
     }
 
     return NextResponse.json(room);
   } catch (error) {
     console.error("Error fetching room:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch room" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch room" }, { status: 500 });
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  context: RouteContext
-) {
+export async function PUT(request: NextRequest, context: RouteContext) {
   try {
+    // Only ADMIN and OWNER may update rooms
+    const authResult = requireRole(request, "ADMIN", "OWNER");
+    if (!isUser(authResult)) return authResult;
+    const user = authResult;
+
     const { id } = await context.params;
 
     const existing = await prisma.room.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json(
-        { error: "Room not found" },
-        { status: 404 }
-      );
+      return notFound("Room");
+    }
+
+    // Verify the user has access to the property this room belongs to
+    const accessible = await hasPropertyAccess(user, existing.propertyId);
+    if (!accessible) {
+      return forbidden("You do not have access to this room");
     }
 
     const body = await request.json();
-    const { roomNumber, floor, roomType, sharingType, monthlyRent, dailyRent, status, totalBeds, occupiedBeds, amenities } = body;
+    const validation = validateBody(updateRoomSchema, body);
+    if (validation.error) {
+      return badRequest(validation.error);
+    }
+    const data = validation.data!;
 
     const room = await prisma.room.update({
       where: { id },
-      data: {
-        ...(roomNumber !== undefined && { roomNumber }),
-        ...(floor !== undefined && { floor }),
-        ...(roomType !== undefined && { roomType }),
-        ...(sharingType !== undefined && { sharingType }),
-        ...(monthlyRent !== undefined && { monthlyRent }),
-        ...(dailyRent !== undefined && { dailyRent }),
-        ...(status !== undefined && { status }),
-        ...(totalBeds !== undefined && { totalBeds }),
-        ...(occupiedBeds !== undefined && { occupiedBeds }),
-        ...(amenities !== undefined && { amenities }),
-      },
+      data,
     });
 
     return NextResponse.json(room);
   } catch (error) {
     console.error("Error updating room:", error);
-    return NextResponse.json(
-      { error: "Failed to update room" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to update room" }, { status: 500 });
   }
 }

@@ -1,8 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { MealType } from "@prisma/client";
+import {
+  requireAuth,
+  requireRole,
+  isUser,
+  getUserPropertyIds,
+  hasPropertyAccess,
+  forbidden,
+  notFound,
+  badRequest,
+} from "@/lib/authorization";
+import { createMealSchema, validateBody } from "@/lib/validations";
 
 export async function GET(request: NextRequest) {
+  const authResult = requireAuth(request);
+  if (!isUser(authResult)) return authResult;
+  const user = authResult;
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const page = Math.max(1, parseInt(searchParams.get("page") || "1"));
@@ -13,8 +28,19 @@ export async function GET(request: NextRequest) {
     const date = searchParams.get("date");
     const mealType = searchParams.get("mealType") as MealType | null;
 
+    // Resolve the set of property IDs this user can see
+    const accessiblePropertyIds = await getUserPropertyIds(user);
+
+    // If the caller filtered by a specific propertyId, verify access first
+    if (propertyId && !accessiblePropertyIds.includes(propertyId)) {
+      return forbidden("You do not have access to the requested property");
+    }
+
     const where: Record<string, unknown> = {};
-    if (propertyId) where.propertyId = propertyId;
+
+    // Scope to accessible properties; narrow further if the caller specified one
+    where.propertyId = propertyId ? propertyId : { in: accessiblePropertyIds };
+
     if (mealType) where.mealType = mealType;
     if (date) {
       const dateObj = new Date(date);
@@ -46,32 +72,28 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error listing meals:", error);
-    return NextResponse.json(
-      { error: "Failed to list meals" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to list meals" }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
+  // Only ADMIN and OWNER may create meals
+  const authResult = requireRole(request, "ADMIN", "OWNER");
+  if (!isUser(authResult)) return authResult;
+  const user = authResult;
+
   try {
     const body = await request.json();
-    const { propertyId, date, mealType, menuItems, expectedCount } = body;
+    const validation = validateBody(createMealSchema, body);
+    if (validation.error) return badRequest(validation.error);
+    const { propertyId, date, mealType, menuItems, expectedCount } = validation.data!;
 
-    if (!propertyId || !date || !mealType || !menuItems) {
-      return NextResponse.json(
-        { error: "Missing required fields: propertyId, date, mealType, menuItems" },
-        { status: 400 }
-      );
-    }
+    // Verify the user has access to this property
+    const hasAccess = await hasPropertyAccess(user, propertyId);
+    if (!hasAccess) return forbidden("You do not have access to this property");
 
     const property = await prisma.property.findUnique({ where: { id: propertyId } });
-    if (!property) {
-      return NextResponse.json(
-        { error: "Property not found" },
-        { status: 404 }
-      );
-    }
+    if (!property) return notFound("Property");
 
     const meal = await prisma.meal.create({
       data: {
@@ -79,7 +101,7 @@ export async function POST(request: NextRequest) {
         date: new Date(date),
         mealType,
         menuItems,
-        expectedCount: expectedCount || 0,
+        expectedCount: expectedCount ?? 0,
       },
       include: {
         property: { select: { id: true, name: true } },
@@ -89,9 +111,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(meal, { status: 201 });
   } catch (error) {
     console.error("Error creating meal:", error);
-    return NextResponse.json(
-      { error: "Failed to create meal" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create meal" }, { status: 500 });
   }
 }
